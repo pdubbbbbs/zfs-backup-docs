@@ -8,10 +8,12 @@ import os
 import subprocess
 import json
 import datetime
+import argparse
 from http.server import HTTPServer, SimpleHTTPRequestHandler
 from pathlib import Path
 import threading
 import time
+import socket
 
 class BackupMonitor:
     def __init__(self):
@@ -118,17 +120,24 @@ class BackupMonitor:
                             <th>Status</th>
                         </tr>
         """
-        for backup in status["weekly_backups"]:
-            age_class = "ok" if backup["age_days"] <= 7 else "warning" if backup["age_days"] <= 14 else "alert"
+        if isinstance(status["weekly_backups"], dict) and "error" in status["weekly_backups"]:
             html += f"""
                         <tr>
-                            <td>{backup['file']}</td>
-                            <td>{backup['date']}</td>
-                            <td class="{age_class}">{backup['age_days']}</td>
-                            <td>{backup['size']}</td>
-                            <td class="{age_class}">{'OK' if backup['age_days'] <= 7 else 'Warning' if backup['age_days'] <= 14 else 'Alert'}</td>
+                            <td colspan="5" class="alert">Error: {status["weekly_backups"]["error"]}</td>
                         </tr>
             """
+        else:
+            for backup in status["weekly_backups"]:
+                age_class = "ok" if backup["age_days"] <= 7 else "warning" if backup["age_days"] <= 14 else "alert"
+                html += f"""
+                            <tr>
+                                <td>{backup['file']}</td>
+                                <td>{backup['date']}</td>
+                                <td class="{age_class}">{backup['age_days']}</td>
+                                <td>{backup['size']}</td>
+                                <td class="{age_class}">{'OK' if backup['age_days'] <= 7 else 'Warning' if backup['age_days'] <= 14 else 'Alert'}</td>
+                            </tr>
+                """
         html += """
                     </table>
                 </div>
@@ -147,17 +156,24 @@ class BackupMonitor:
                             <th>Status</th>
                         </tr>
         """
-        for backup in status["monthly_backups"]:
-            age_class = "ok" if backup["age_days"] <= 31 else "warning" if backup["age_days"] <= 45 else "alert"
+        if isinstance(status["monthly_backups"], dict) and "error" in status["monthly_backups"]:
             html += f"""
                         <tr>
-                            <td>{backup['file']}</td>
-                            <td>{backup['date']}</td>
-                            <td class="{age_class}">{backup['age_days']}</td>
-                            <td>{backup['size']}</td>
-                            <td class="{age_class}">{'OK' if backup['age_days'] <= 31 else 'Warning' if backup['age_days'] <= 45 else 'Alert'}</td>
+                            <td colspan="5" class="alert">Error: {status["monthly_backups"]["error"]}</td>
                         </tr>
             """
+        else:
+            for backup in status["monthly_backups"]:
+                age_class = "ok" if backup["age_days"] <= 31 else "warning" if backup["age_days"] <= 45 else "alert"
+                html += f"""
+                            <tr>
+                                <td>{backup['file']}</td>
+                                <td>{backup['date']}</td>
+                                <td class="{age_class}">{backup['age_days']}</td>
+                                <td>{backup['size']}</td>
+                                <td class="{age_class}">{'OK' if backup['age_days'] <= 31 else 'Warning' if backup['age_days'] <= 45 else 'Alert'}</td>
+                            </tr>
+                """
         html += """
                     </table>
                 </div>
@@ -176,18 +192,25 @@ class BackupMonitor:
                             <th>Usage</th>
                         </tr>
         """
-        for mount, info in status["storage"].items():
-            usage_value = int(info["usage"].strip('%'))
-            usage_class = "ok" if usage_value < 80 else "warning" if usage_value < 90 else "alert"
+        if isinstance(status["storage"], dict) and "error" in status["storage"]:
             html += f"""
                         <tr>
-                            <td>{mount}</td>
-                            <td>{info['total']}</td>
-                            <td>{info['used']}</td>
-                            <td>{info['available']}</td>
-                            <td class="{usage_class}">{info['usage']}</td>
+                            <td colspan="5" class="alert">Error: {status["storage"]["error"]}</td>
                         </tr>
             """
+        else:
+            for mount, info in status["storage"].items():
+                usage_value = int(info["usage"].strip('%'))
+                usage_class = "ok" if usage_value < 80 else "warning" if usage_value < 90 else "alert"
+                html += f"""
+                            <tr>
+                                <td>{mount}</td>
+                                <td>{info['total']}</td>
+                                <td>{info['used']}</td>
+                                <td>{info['available']}</td>
+                                <td class="{usage_class}">{info['usage']}</td>
+                            </tr>
+                """
         html += """
                     </table>
                 </div>
@@ -208,7 +231,22 @@ def update_status(monitor):
         monitor.generate_html()
         time.sleep(300)  # Update every 5 minutes
 
+def find_available_port(start_port=8080, end_port=8090):
+    for port in range(start_port, end_port + 1):
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            try:
+                s.bind(('localhost', port))
+                return port
+            except OSError:
+                continue
+    raise OSError(f"No available ports in range {start_port}-{end_port}")
+
 def main():
+    parser = argparse.ArgumentParser(description='ZFS Backup Web Monitor')
+    parser.add_argument('--port', type=int, help='Port to run the web server on (default: first available port 8080-8090)')
+    parser.add_argument('--host', default='localhost', help='Host to bind to (default: localhost)')
+    args = parser.parse_args()
+
     monitor = BackupMonitor()
     monitor.generate_html()
     
@@ -216,10 +254,12 @@ def main():
     update_thread = threading.Thread(target=update_status, args=(monitor,), daemon=True)
     update_thread.start()
     
+    # Find available port if none specified
+    port = args.port if args.port else find_available_port()
+    
     # Start web server
-    port = 8080
-    server = HTTPServer(('localhost', port), MonitorHandler)
-    print(f"Server started at http://localhost:{port}")
+    server = HTTPServer((args.host, port), MonitorHandler)
+    print(f"Server started at http://{args.host}:{port}")
     server.serve_forever()
 
 if __name__ == "__main__":
