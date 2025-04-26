@@ -150,3 +150,48 @@ To automate the monitoring and maintenance, add the scripts to your crontab:
 
 This documentation is licensed under the [MIT License](LICENSE).
 
+
+### Web Monitor Interface
+
+Monitor backup status through a web interface using `web_monitor.py`.
+
+**Usage:**
+```bash
+./scripts/web_monitor.py
+```
+
+**Features:**
+- Real-time web interface at http://localhost:8080
+- Auto-refreshes every 5 minutes
+- Shows backup status and age
+- Displays storage usage
+- Color-coded status indicators
+- Responsive design for all devices
+
+**Requirements:**
+- Python 3.6 or higher
+- Web browser access
+
+To run as a service, create a systemd service file:
+
+```bash
+sudo tee /etc/systemd/system/zfs-backup-monitor.service << EOF
+[Unit]
+Description=ZFS Backup Web Monitor
+After=network.target
+
+[Service]
+ExecStart=/path/to/scripts/web_monitor.py
+WorkingDirectory=/path/to/scripts
+User=your_username
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+sudo systemctl daemon-reload
+sudo systemctl enable zfs-backup-monitor
+sudo systemctl start zfs-backup-monitor
+```
+
