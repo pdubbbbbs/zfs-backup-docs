@@ -8,6 +8,11 @@ The backup system performs regular ZFS snapshots of the `tank/stage` dataset on 
 
 ### Backup Types
 
+- **Daily Backups**: Stored in `/mnt/orico1/zfs_backups/`
+  - Naming pattern: `tank_stage-daily-YYYYMMDD.gz`
+  - Example: `tank_stage-daily-20250426.gz` (April 26, 2025)
+  - Retention: 7 days
+
 - **Weekly Backups**: Stored in `/mnt/orico1/zfs_backups/`
   - Naming pattern: `tank_stage-weekly-YYYYWW.gz`
   - Example: `tank_stage-weekly-202517.gz` (Week 17 of 2025)
@@ -22,6 +27,7 @@ The backup system performs regular ZFS snapshots of the `tank/stage` dataset on 
 Proxmox Server (192.168.112.34)
 └── ZFS Pool: tank
     └── Dataset: tank/stage
+        ├── Snapshot: @daily-YYYYMMDD
         ├── Snapshot: @weekly-YYYYWW
         └── Snapshot: @monthly-YYYYMM
             │
@@ -33,6 +39,8 @@ Proxmox Server (192.168.112.34)
 NAS Server (192.168.12.168)
 ├── Orico1 Share
 │   └── /zfs_backups/
+│       ├── tank_stage-daily-YYYYMMDD.gz
+│       ├── tank_stage-daily-YYYYMMDD.sha256
 │       ├── tank_stage-weekly-YYYYWW.gz
 │       └── tank_stage-weekly-YYYYWW.sha256
 │
@@ -151,47 +159,179 @@ To automate the monitoring and maintenance, add the scripts to your crontab:
 This documentation is licensed under the [MIT License](LICENSE).
 
 
-### Web Monitor Interface
+## ZFS Backup Monitor
 
-Monitor backup status through a web interface using `web_monitor.py`.
+The ZFS Backup Monitor provides a web-based interface for monitoring the status of your ZFS backup system.
 
-**Usage:**
-```bash
-./scripts/web_monitor.py
+### Overview
+
+The monitoring system continuously tracks the status of your daily, weekly, and monthly ZFS backups, providing an easy-to-read dashboard with status indicators. The monitor automatically refreshes every 5 minutes to show the latest status of your backup system.
+
+### Features
+
+- **Comprehensive Backup Monitoring**:
+  - Daily backup status and age tracking
+  - Weekly backup status and age tracking
+  - Monthly backup status and age tracking
+  - Color-coded status indicators for quick assessment
+  
+- **Storage Status Monitoring**:
+  - Disk space usage for all backup drives
+  - Visual indicators for storage capacity issues
+  
+- **User-Friendly Interface**:
+  - Clean, responsive web interface
+  - Automatic page refresh every 5 minutes
+  - Compatible with desktop and mobile browsers
+  
+- **Status Thresholds**:
+  - Daily backups: 
+    - OK (green): ≤ 1 day old
+    - Warning (orange): 1-2 days old
+    - Alert (red): > 2 days old
+  - Weekly backups:
+    - OK (green): ≤ 7 days old
+    - Warning (orange): 7-14 days old
+    - Alert (red): > 14 days old
+  - Monthly backups:
+    - OK (green): ≤ 31 days old 
+    - Warning (orange): 31-45 days old
+    - Alert (red): > 45 days old
+
+### Installation
+
+Follow these steps to install and configure the ZFS Backup Monitor:
+
+1. **Clone the repository** (if you haven't already):
+   ```bash
+   git clone https://github.com/pdubbbbbs/zfs-backup-docs.git
+   cd zfs-backup-docs
+   ```
+
+2. **Install the systemd service file**:
+   ```bash
+   sudo cp zfs-backup-monitor.service /etc/systemd/system/
+   sudo systemctl daemon-reload
+   ```
+
+3. **Configure the service** (optional):
+   
+   Edit the service file if you need to change default settings:
+   ```bash
+   sudo nano /etc/systemd/system/zfs-backup-monitor.service
+   ```
+   
+   You can modify port, host, and other parameters in the ExecStart line.
+
+4. **Enable and start the service**:
+   ```bash
+   sudo systemctl enable zfs-backup-monitor
+   sudo systemctl start zfs-backup-monitor
+   ```
+
+### Usage
+
+#### Accessing the Web Interface
+
+Once the service is running, you can access the web interface at:
+```
+http://your-server-ip:8080
 ```
 
-**Features:**
-- Real-time web interface at http://localhost:8080
-- Auto-refreshes every 5 minutes
-- Shows backup status and age
-- Displays storage usage
-- Color-coded status indicators
-- Responsive design for all devices
-
-**Requirements:**
-- Python 3.6 or higher
-- Web browser access
-
-To run as a service, create a systemd service file:
-
-```bash
-sudo tee /etc/systemd/system/zfs-backup-monitor.service << EOF
-[Unit]
-Description=ZFS Backup Web Monitor
-After=network.target
-
-[Service]
-ExecStart=/path/to/scripts/web_monitor.py
-WorkingDirectory=/path/to/scripts
-User=your_username
-Restart=always
-
-[Install]
-WantedBy=multi-user.target
-EOF
-
-sudo systemctl daemon-reload
-sudo systemctl enable zfs-backup-monitor
-sudo systemctl start zfs-backup-monitor
+If you're accessing it locally on the same machine:
+```
+http://localhost:8080
 ```
 
+#### Understanding Status Indicators
+
+The monitor uses a color-coded system to indicate backup status:
+
+- **Green (OK)**: The backup is recent and within expected time frames
+- **Orange (Warning)**: The backup is older than ideal but still acceptable
+- **Red (Alert)**: The backup is too old and requires attention
+
+#### Service Management
+
+Common commands for managing the ZFS Backup Monitor service:
+
+- **Check service status**:
+  ```bash
+  sudo systemctl status zfs-backup-monitor
+  ```
+
+- **Start the service**:
+  ```bash
+  sudo systemctl start zfs-backup-monitor
+  ```
+
+- **Stop the service**:
+  ```bash
+  sudo systemctl stop zfs-backup-monitor
+  ```
+
+- **Restart the service**:
+  ```bash
+  sudo systemctl restart zfs-backup-monitor
+  ```
+
+- **View service logs**:
+  ```bash
+  sudo journalctl -u zfs-backup-monitor
+  ```
+  
+  To see the most recent logs:
+  ```bash
+  sudo journalctl -u zfs-backup-monitor -n 50 --no-pager
+  ```
+
+- **Follow logs in real-time**:
+  ```bash
+  sudo journalctl -u zfs-backup-monitor -f
+  ```
+
+### Troubleshooting
+
+Here are some common issues and their solutions:
+
+1. **Web interface not accessible**:
+   - Check if the service is running: `sudo systemctl status zfs-backup-monitor`
+   - Verify firewall settings allow access to port 8080
+   - Check logs for specific errors: `sudo journalctl -u zfs-backup-monitor -n 100`
+
+2. **Missing backup information**:
+   - Verify that backup directories are properly mounted
+   - Check file permissions for the backup directories
+   - Run `ls -la /mnt/orico1/zfs_backups/` and `ls -la /mnt/orico2/zfs_backups/` to confirm access
+
+3. **Service won't start**:
+   - Check for syntax errors in the service file
+   - Verify Python 3 is installed and in the expected location
+   - Ensure user permissions are correct
+   - Look for detailed error messages in the logs
+
+4. **Error: "Address already in use"**:
+   - Another service is using port 8080
+   - Modify the `--port` parameter in the service file to use a different port
+
+5. **Data shows as "Error"**:
+   - Check mount points for the external drives
+   - Verify the service user has access permissions to the backup directories
+   - Check system logs for drive/mount related errors
+
+### Manual Execution
+
+If you want to run the monitor manually for testing:
+
+```bash
+cd /home/sitboo/zfs-backup-docs
+python3 scripts/web_monitor.py
+```
+
+Or with custom parameters:
+
+```bash
+python3 scripts/web_monitor.py --host=0.0.0.0 --port=8888
+```
+
+This will start the web server in the foreground. Press Ctrl+C to stop it.

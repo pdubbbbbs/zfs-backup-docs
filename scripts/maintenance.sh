@@ -5,8 +5,9 @@
 # Set script variables
 LOG_DIR="$(dirname "$0")/logs"
 LOG_FILE="${LOG_DIR}/maintenance.log"
-WEEKLY_RETAIN=8      # Number of weekly backups to keep
-MONTHLY_RETAIN=12    # Number of monthly backups to keep
+DAILY_RETAIN=7        # Number of daily backups to keep
+WEEKLY_RETAIN=8       # Number of weekly backups to keep
+MONTHLY_RETAIN=12     # Number of monthly backups to keep
 EXIT_CODE=0
 
 # Create log directory if it doesn't exist
@@ -27,6 +28,18 @@ handle_error() {
 # Rotate old backups
 rotate_backups() {
     log "Starting backup rotation..."
+    
+    # Rotate daily backups
+    log "Rotating daily backups (keeping last $DAILY_RETAIN)..."
+    local daily_count=$(find /mnt/orico1/zfs_backups -name "tank_stage-daily-*.gz" | wc -l)
+    if [ $daily_count -gt $DAILY_RETAIN ]; then
+        find /mnt/orico1/zfs_backups -name "tank_stage-daily-*.gz" -type f -printf '%T@ %p\n' | \
+        sort -n | head -n $(($daily_count - $DAILY_RETAIN)) | while read -r line; do
+            file=$(echo "$line" | cut -d' ' -f2-)
+            log "Removing old daily backup: $(basename "$file")"
+            rm "$file" "${file%.gz}.sha256"
+        done
+    fi
     
     # Rotate weekly backups
     log "Rotating weekly backups (keeping last $WEEKLY_RETAIN)..."

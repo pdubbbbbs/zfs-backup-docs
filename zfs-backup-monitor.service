@@ -1,0 +1,16 @@
+[Unit]
+Description=ZFS Backup Web Monitor
+After=network.target
+Documentation=https://github.com/pdubbbbbs/zfs-backup-docs
+
+[Service]
+Type=simple
+User=sitboo
+Group=sitboo
+WorkingDirectory=/home/sitboo/zfs-backup-docs
+ExecStart=/usr/bin/python3 /home/sitboo/zfs-backup-docs/scripts/web_monitor.py --host=0.0.0.0 --port=8080
+Restart=on-failure
+RestartSec=5s
+
+[Install]
+WantedBy=multi-user.target

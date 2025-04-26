@@ -24,12 +24,28 @@ class BackupMonitor:
     def get_backup_status(self):
         status = {
             "timestamp": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "daily_backups": [],
             "weekly_backups": [],
             "monthly_backups": [],
             "storage": {},
             "system_health": {"status": "OK"}
         }
         
+        # Check daily backups
+        try:
+            daily_files = list(Path("/mnt/orico1/zfs_backups").glob("tank_stage-daily-*.gz"))
+            for file in sorted(daily_files, key=lambda x: x.stat().st_mtime, reverse=True)[:5]:
+                mtime = datetime.datetime.fromtimestamp(file.stat().st_mtime)
+                age_days = (datetime.datetime.now() - mtime).days
+                status["daily_backups"].append({
+                    "file": file.name,
+                    "date": mtime.strftime("%Y-%m-%d %H:%M:%S"),
+                    "age_days": age_days,
+                    "size": f"{file.stat().st_size / 1024 / 1024:.2f} MB"
+                })
+        except Exception as e:
+            status["daily_backups"] = {"error": str(e)}
+
         # Check weekly backups
         try:
             weekly_files = list(Path("/mnt/orico1/zfs_backups").glob("tank_stage-weekly-*.gz"))
@@ -104,6 +120,42 @@ class BackupMonitor:
                 <div class="header">
                     <h1>ZFS Backup Monitor</h1>
                     <p class="updated">Last updated: """ + status["timestamp"] + """</p>
+                </div>
+        """
+
+        # Daily Backups
+        html += """
+                <div class="card">
+                    <h2>Daily Backups</h2>
+                    <table>
+                        <tr>
+                            <th>Backup File</th>
+                            <th>Date</th>
+                            <th>Age (days)</th>
+                            <th>Size</th>
+                            <th>Status</th>
+                        </tr>
+        """
+        if isinstance(status["daily_backups"], dict) and "error" in status["daily_backups"]:
+            html += f"""
+                        <tr>
+                            <td colspan="5" class="alert">Error: {status["daily_backups"]["error"]}</td>
+                        </tr>
+            """
+        else:
+            for backup in status["daily_backups"]:
+                age_class = "ok" if backup["age_days"] <= 1 else "warning" if backup["age_days"] <= 2 else "alert"
+                html += f"""
+                            <tr>
+                                <td>{backup['file']}</td>
+                                <td>{backup['date']}</td>
+                                <td class="{age_class}">{backup['age_days']}</td>
+                                <td>{backup['size']}</td>
+                                <td class="{age_class}">{'OK' if backup['age_days'] <= 1 else 'Warning' if backup['age_days'] <= 2 else 'Alert'}</td>
+                            </tr>
+                """
+        html += """
+                    </table>
                 </div>
         """
 
